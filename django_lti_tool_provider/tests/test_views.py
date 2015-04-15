@@ -1,5 +1,5 @@
-from random import random
 import ddt
+from mock import patch
 
 from oauth2 import Request, Consumer, SignatureMethod_HMAC_SHA1
 
@@ -10,6 +10,7 @@ from django.test import Client, TestCase
 from django.conf import settings
 
 from django_lti_tool_provider.models import LtiUserData
+from django_lti_tool_provider.views import LTIView
 
 
 @override_settings(CONSUMER_KEY='123', LTI_SECRET='456')
@@ -62,7 +63,7 @@ class AnonymousLtiRequestTests(LtiRequestsTestBase):
     def test_given_correct_requests_sets_session_variable(self):
         response = self.send_lti_request(self.get_correct_lti_payload())
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, self._url_base + '/accounts/login/?next=lti')
+        self.assertEqual(response.url, self._url_base + reverse('django.contrib.auth.views.login')+'?next=lti')
         self.assertIn('lti_parameters', self.client.session)
         session_lti_params = self.client.session['lti_parameters']
         for key, value in self._data.items():
@@ -70,6 +71,7 @@ class AnonymousLtiRequestTests(LtiRequestsTestBase):
 
 
 @ddt.ddt
+@patch('django_lti_tool_provider.views.Signals.LTI.received.send')
 class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
     fixtures = ['test_auth.yaml']
 
@@ -88,21 +90,26 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         for key, value in expected_lti_data.items():
             self.assertEqual(value, lti_data.edx_lti_parameters[key])
 
-    def test_no_session_given_incorrect_payload_throws_bad_request(self):
+    def _verify_lti_updated_signal_is_sent(self, patched_send_lti_received, expected_user):
+        expected_lti_data = LtiUserData.objects.get(user=self.user)
+        patched_send_lti_received.assert_called_once_with(LTIView, user=expected_user, lti_data=expected_lti_data)
+
+    def test_no_session_given_incorrect_payload_throws_bad_request(self, _):
         response = self.send_lti_request(self.get_incorrect_lti_payload())
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid LTI Request", response.content)
 
-    def test_no_session_correct_payload_processes_lti_request(self):
+    def test_no_session_correct_payload_processes_lti_request(self, patched_send_lti_received):
         with self.assertRaises(LtiUserData.DoesNotExist):
             LtiUserData.objects.get(user=self.user)  # precondition check
 
         response = self.send_lti_request(self.get_correct_lti_payload())
 
         self._verify_lti_created_and_redirected_to_home(response, self._data)
+        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
 
     @ddt.data('GET', 'POST')
-    def test_session_set__processes_lti_request(self, method):
+    def test_session_set_processes_lti_request(self, method, patched_send_lti_received):
         with self.assertRaises(LtiUserData.DoesNotExist):
             LtiUserData.objects.get(user=self.user)  # precondition check
 
@@ -116,8 +123,9 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
             response = self.client.post('/lti/')
 
         self._verify_lti_created_and_redirected_to_home(response, self._data)
+        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
 
-    def test_given_session_and_lti_uses_lti(self):
+    def test_given_session_and_lti_uses_lti(self, patched_send_lti_received):
         with self.assertRaises(LtiUserData.DoesNotExist):
             LtiUserData.objects.get(user=self.user)  # precondition check
 
@@ -128,3 +136,4 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         response = self.send_lti_request(self.get_correct_lti_payload())
 
         self._verify_lti_created_and_redirected_to_home(response, self._data)
+        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)

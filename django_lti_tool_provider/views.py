@@ -10,6 +10,7 @@ from django.conf import settings
 from ims_lti_py.tool_provider import DjangoToolProvider
 
 from django_lti_tool_provider.models import LtiUserData
+from django_lti_tool_provider.signals import Signals
 
 
 _logger = logging.getLogger(__name__)
@@ -76,7 +77,8 @@ class LTIView(View):
                 _logger.exception(u"Invalid LTI Request")
                 return HttpResponseBadRequest("Invalid LTI Request: " + e.message)
 
-        _ = self._store_lti_parameters(request.user, lti_parameters)
+        lti_data = self._store_lti_parameters(request.user, lti_parameters)
+        Signals.LTI.received.send(self.__class__, user=request.user, lti_data=lti_data)
 
         return HttpResponseRedirect(reverse(settings.REDIRECT_AFTER_LTI))
 
