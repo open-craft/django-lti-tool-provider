@@ -23,7 +23,7 @@ def grade_updated_handler(sender, **kwargs):
     _send_grade(user, grade)
 
 
-def _send_grade(user, grade, strict=True):
+def _send_grade(user, grade):
     try:
         if user is None:
             raise ValueError(u"User is not specified")
@@ -34,9 +34,7 @@ def _send_grade(user, grade, strict=True):
             u"No LTI parameters for user {user} stored - probably never sent an LTI request"
             .format(user=user.username)
         )
-        if strict:
-            raise
-    except Exception:
+        raise
+    except Exception:  # pylint:disable=too-broad-exception
         _logger.exception(u"Exception occurred in lti module when sending grade for user {user}.".format(user=user))
-        if strict:
-            raise
+        raise
