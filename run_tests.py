@@ -1,22 +1,50 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Run tests for the Problem Builder XBlock
-This script is required to run our selenium tests inside the xblock-sdk workbench
-because the workbench SDK's settings file is not inside any python module.
+Run tests for the Django LTI Tool PRovider
 """
 
-import os
 import sys
+from django.conf import settings
+from django.core.management import execute_from_command_line
+
+settings.configure(
+    DEBUG=True,
+    DATABASES={
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+        }
+    },
+    SITE_ID=1,
+    INSTALLED_APPS=[
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django_lti_tool_provider'
+    ],
+    MIDDLEWARE_CLASSES=[
+        'django.middleware.common.CommonMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+    ],
+    ROOT_URLCONF='django_lti_tool_provider.tests.urls',
+    REDIRECT_AFTER_LTI='home',
+    TEMPLATE_CONTEXT_PROCESSORS=(
+        "django.contrib.auth.context_processors.auth"
+    ),
+    USE_TZ=True,
+    SOUTH_TESTS_MIGRATE=True,
+    CONSUMER_KEY='lti_consumer_secret_key',
+    LTI_SECRET='lti_secret_key',
+    SECRET_KEY='test_secret_key_not_need_to_look_like_actual_secret_key',
+)
 
 if __name__ == "__main__":
-    from django.conf import settings
-    settings.INSTALLED_APPS += ("lti_tool_provider", )
-
-    from django.core.management import execute_from_command_line
     args = sys.argv[1:]
     paths = [arg for arg in args if arg[0] != '-']
     if not paths:
-        paths = ["lti/tests/"]
+        paths = ["django_lti_tool_provider/tests"]
     options = [arg for arg in args if arg not in paths]
     execute_from_command_line([sys.argv[0], "test"] + paths + options)
