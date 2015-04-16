@@ -17,6 +17,8 @@ _logger = logging.getLogger(__name__)
 
 
 class LTIView(View):
+    authentication_hooks = []
+
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
         return super(LTIView, self).dispatch(*args, **kwargs)
@@ -28,12 +30,22 @@ class LTIView(View):
         return self.process_request(request)
 
     def process_request(self, request):
+        if not request.user.is_authenticated():
+            for hook in self.authentication_hooks:
+                hook(request)
+
         if request.user.is_authenticated():
             return self.process_authenticated_lti(request)
         else:
             return self.process_anonymous_lti(request)
 
-    def process_anonymous_lti(self, request):
+    @classmethod
+    def register_authentication_hook(cls, hook):
+        """ Adds hook to pre-processing hooks list """
+        cls.authentication_hooks.append(hook)
+
+    @classmethod
+    def process_anonymous_lti(cls, request):
         """
         This method handles LTI request if it was sent prior to MyDante authorization. In such a case, we need user
         authenticated first. Unfortunately, it looses POST data in the process, so when it gets back original LTI
@@ -55,7 +67,8 @@ class LTIView(View):
             )
         )
 
-    def process_authenticated_lti(self, request):
+    @classmethod
+    def process_authenticated_lti(cls, request):
         """
         There are two options:
         1. This is actual LTI request made with cookies already set - need parsing and validating LTI parameters
@@ -77,12 +90,13 @@ class LTIView(View):
                 _logger.exception(u"Invalid LTI Request")
                 return HttpResponseBadRequest("Invalid LTI Request: " + e.message)
 
-        lti_data = self._store_lti_parameters(request.user, lti_parameters)
-        Signals.LTI.received.send(self.__class__, user=request.user, lti_data=lti_data)
+        lti_data = cls._store_lti_parameters(request.user, lti_parameters)
+        Signals.LTI.received.send(cls, user=request.user, lti_data=lti_data)
 
         return HttpResponseRedirect(reverse(settings.REDIRECT_AFTER_LTI))
 
-    def _store_lti_parameters(self, user, parameters):
+    @classmethod
+    def _store_lti_parameters(cls, user, parameters):
         """
         Filters out OAuth parameters than stores LTI parameters into the DB, creating or updating record as needed
         """

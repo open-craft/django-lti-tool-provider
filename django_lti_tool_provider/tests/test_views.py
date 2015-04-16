@@ -1,5 +1,6 @@
 import ddt
-from mock import patch
+from django.contrib.auth import login, authenticate
+from mock import patch, Mock
 
 from oauth2 import Request, Consumer, SignatureMethod_HMAC_SHA1
 
@@ -50,6 +51,15 @@ class LtiRequestsTestBase(TestCase):
     def send_lti_request(self, payload):
         return self.client.post('/lti/', payload, content_type='application/x-www-form-urlencoded')
 
+    def _verify_lti_created_and_redirected_to_home(self, response, user, expected_lti_data):
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self._url_base+reverse(settings.REDIRECT_AFTER_LTI))
+
+        lti_data = LtiUserData.objects.get(user=user)
+        self.assertIsNotNone(lti_data)
+        for key, value in expected_lti_data.items():
+            self.assertEqual(value, lti_data.edx_lti_parameters[key])
+
 
 class AnonymousLtiRequestTests(LtiRequestsTestBase):
     def setUp(self):
@@ -81,15 +91,6 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         logged_in = self.client.login(username='test', password='test')
         self.assertTrue(logged_in)
 
-    def _verify_lti_created_and_redirected_to_home(self, response, expected_lti_data):
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, self._url_base+reverse(settings.REDIRECT_AFTER_LTI))
-
-        lti_data = LtiUserData.objects.get(user=self.user)
-        self.assertIsNotNone(lti_data)
-        for key, value in expected_lti_data.items():
-            self.assertEqual(value, lti_data.edx_lti_parameters[key])
-
     def _verify_lti_updated_signal_is_sent(self, patched_send_lti_received, expected_user):
         expected_lti_data = LtiUserData.objects.get(user=self.user)
         patched_send_lti_received.assert_called_once_with(LTIView, user=expected_user, lti_data=expected_lti_data)
@@ -105,7 +106,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
 
         response = self.send_lti_request(self.get_correct_lti_payload())
 
-        self._verify_lti_created_and_redirected_to_home(response, self._data)
+        self._verify_lti_created_and_redirected_to_home(response, self.user, self._data)
         self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
 
     @ddt.data('GET', 'POST')
@@ -122,7 +123,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         else:
             response = self.client.post('/lti/')
 
-        self._verify_lti_created_and_redirected_to_home(response, self._data)
+        self._verify_lti_created_and_redirected_to_home(response, self.user, self._data)
         self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
 
     def test_given_session_and_lti_uses_lti(self, patched_send_lti_received):
@@ -135,5 +136,54 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
 
         response = self.send_lti_request(self.get_correct_lti_payload())
 
-        self._verify_lti_created_and_redirected_to_home(response, self._data)
+        self._verify_lti_created_and_redirected_to_home(response, self.user, self._data)
         self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
+
+
+class AuthenticationHookTests(LtiRequestsTestBase):
+    def setUp(self):
+        self.client = Client()
+
+    def tearDown(self):
+        LTIView.authentication_hooks = []
+        self.client.logout()
+
+    def _authenticate_user(self, request):
+        username = request.user.get_username()
+        if not username:
+            username = "test_username"
+        password = "test_password"
+
+        user = User.objects.create_user(username=username, email=username+'@test.com', password=password)
+        authenticated = authenticate(username=username, password=password)
+        login(request, authenticated)
+
+        self.addCleanup(lambda: user.delete())
+
+    def test_authentication_hook_executed_if_not_authenticated(self):
+        hook = Mock()
+        LTIView.register_authentication_hook(hook)
+        payload = self.get_correct_lti_payload()
+        self.send_lti_request(payload)
+        request = hook.call_args[0][0]
+        self.assertEqual(request.body, payload)
+        self.assertFalse(request.user.is_authenticated())
+
+    def test_anonymous_lti_is_processed_if_hook_does_not_authenticate_user(self):
+        hook = Mock()
+        LTIView.register_authentication_hook(hook)
+        response = self.send_lti_request(self.get_correct_lti_payload())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self._url_base + reverse('django.contrib.auth.views.login')+'?next=lti')
+        self.assertIn('lti_parameters', self.client.session)
+        session_lti_params = self.client.session['lti_parameters']
+        for key, value in self._data.items():
+            self.assertEqual(value, session_lti_params[key])
+
+    def test_authenticated_lti_is_processed_if_hook_authenticates_user(self):
+        hook = Mock(side_effect=self._authenticate_user)
+        LTIView.register_authentication_hook(hook)
+        response = self.send_lti_request(self.get_correct_lti_payload())
+        expected_user = hook.call_args[0][0].user
+
+        self._verify_lti_created_and_redirected_to_home(response, expected_user, self._data)
