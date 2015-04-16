@@ -2,10 +2,10 @@ from django.views.generic import View
 import oauth2
 import logging
 
+from django.conf import settings
+from django.core.urlresolvers import reverse, NoReverseMatch
 from django.http import HttpResponseRedirect, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
-from django.core.urlresolvers import reverse
-from django.conf import settings
 
 from ims_lti_py.tool_provider import DjangoToolProvider
 
@@ -19,6 +19,12 @@ _logger = logging.getLogger(__name__)
 class LTIView(View):
     authentication_hooks = []
 
+    PASS_TO_AUTHENTICATION_HOOK = {
+        'lis_person_sourcedid': 'username',
+        'lis_person_contact_email_primary': 'email',
+        'user_id': 'user_id'
+    }
+
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
         return super(LTIView, self).dispatch(*args, **kwargs)
@@ -31,13 +37,49 @@ class LTIView(View):
 
     def process_request(self, request):
         if not request.user.is_authenticated():
+            try:
+                lti_parameters = self._get_lti_parameters_from_request(request)
+                lti_data = {
+                    hook_name: lti_parameters.get(lti_name, None)
+                    for lti_name, hook_name in self.PASS_TO_AUTHENTICATION_HOOK.items()
+                }
+            except oauth2.Error, e:
+                _logger.exception(u"Invalid LTI Request")
+                return HttpResponseBadRequest("Invalid LTI Request: " + e.message)
+
             for hook in self.authentication_hooks:
-                hook(request)
+                hook(request, lti_data)
 
         if request.user.is_authenticated():
             return self.process_authenticated_lti(request)
         else:
             return self.process_anonymous_lti(request)
+
+    @classmethod
+    def _get_lti_parameters_from_request(cls, request):
+        provider = DjangoToolProvider(settings.CONSUMER_KEY, settings.LTI_SECRET, request.POST)
+        provider.valid_request(request)
+        return provider.to_params()
+
+    @classmethod
+    def _get_anonymous_redirect_url(cls, request):
+        try:
+            result = "{login}?next={lti_handler}".format(
+                login=reverse('django.contrib.auth.views.login'),
+                lti_handler=request.path.strip('/')
+            )
+        except NoReverseMatch:
+            result = "/"
+        return result
+
+    @classmethod
+    def _get_authenticated_redirect_url(cls):
+        redirect_to = getattr(settings, 'REDIRECT_AFTER_LTI', '')
+        try:
+            result = reverse(redirect_to)
+        except NoReverseMatch:
+            result = "/"+redirect_to
+        return result
 
     @classmethod
     def register_authentication_hook(cls, hook):
@@ -60,12 +102,7 @@ class LTIView(View):
 
         request.session['lti_parameters'] = provider.to_params()
         request.session.save()
-        return HttpResponseRedirect(
-            "{login}?next={lti_handler}".format(
-                login=reverse('django.contrib.auth.views.login'),
-                lti_handler=request.path.strip('/')
-            )
-        )
+        return HttpResponseRedirect(cls._get_anonymous_redirect_url(request))
 
     @classmethod
     def process_authenticated_lti(cls, request):
@@ -83,9 +120,7 @@ class LTIView(View):
             del request.session['lti_parameters']
         else:
             try:
-                provider = DjangoToolProvider(settings.CONSUMER_KEY, settings.LTI_SECRET, request.POST)
-                provider.valid_request(request)
-                lti_parameters = provider.to_params()
+                lti_parameters = cls._get_lti_parameters_from_request(request)
             except oauth2.Error, e:
                 _logger.exception(u"Invalid LTI Request")
                 return HttpResponseBadRequest("Invalid LTI Request: " + e.message)
@@ -93,7 +128,7 @@ class LTIView(View):
         lti_data = cls._store_lti_parameters(request.user, lti_parameters)
         Signals.LTI.received.send(cls, user=request.user, lti_data=lti_data)
 
-        return HttpResponseRedirect(reverse(settings.REDIRECT_AFTER_LTI))
+        return HttpResponseRedirect(cls._get_authenticated_redirect_url())
 
     @classmethod
     def _store_lti_parameters(cls, user, parameters):

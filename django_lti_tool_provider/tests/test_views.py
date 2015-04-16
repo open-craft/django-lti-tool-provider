@@ -22,7 +22,9 @@ class LtiRequestsTestBase(TestCase):
         "user_id": "1234567890",
         "lis_outcome_service_url": "lis_outcome_service_url",
         "resource_link_id": "resource_link_id",
-        "lti_version": "LTI-1p0"
+        "lti_version": "LTI-1p0",
+        'lis_person_sourcedid': 'username',
+        'lis_person_contact_email_primary': 'username@email.com'
     }
 
     _url_base = 'http://testserver'
@@ -51,9 +53,19 @@ class LtiRequestsTestBase(TestCase):
     def send_lti_request(self, payload):
         return self.client.post('/lti/', payload, content_type='application/x-www-form-urlencoded')
 
+    def _authenticate(self):
+        self.client = Client()
+        user = User.objects.get(username='test')
+        logged_in = self.client.login(username='test', password='test')
+        self.assertTrue(logged_in)
+        return user
+
+    def _logout(self):
+        self.client.logout()
+
     def _verify_lti_created_and_redirected_to_home(self, response, user, expected_lti_data):
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, self._url_base+reverse(settings.REDIRECT_AFTER_LTI))
+        self.assertEqual(response.url, self._url_base + reverse(settings.REDIRECT_AFTER_LTI))
 
         lti_data = LtiUserData.objects.get(user=user)
         self.assertIsNotNone(lti_data)
@@ -73,7 +85,7 @@ class AnonymousLtiRequestTests(LtiRequestsTestBase):
     def test_given_correct_requests_sets_session_variable(self):
         response = self.send_lti_request(self.get_correct_lti_payload())
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, self._url_base + reverse('django.contrib.auth.views.login')+'?next=lti')
+        self.assertEqual(response.url, self._url_base + reverse('django.contrib.auth.views.login') + '?next=lti')
         self.assertIn('lti_parameters', self.client.session)
         session_lti_params = self.client.session['lti_parameters']
         for key, value in self._data.items():
@@ -86,10 +98,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
     fixtures = ['test_auth.yaml']
 
     def setUp(self):
-        self.client = Client()
-        self.user = User.objects.get(username='test')
-        logged_in = self.client.login(username='test', password='test')
-        self.assertTrue(logged_in)
+        self.user = self._authenticate()
 
     def _verify_lti_updated_signal_is_sent(self, patched_send_lti_received, expected_user):
         expected_lti_data = LtiUserData.objects.get(user=self.user)
@@ -146,15 +155,15 @@ class AuthenticationHookTests(LtiRequestsTestBase):
 
     def tearDown(self):
         LTIView.authentication_hooks = []
-        self.client.logout()
+        self._logout()
 
-    def _authenticate_user(self, request):
-        username = request.user.get_username()
+    def _authenticate_user(self, request, lti_request):
+        username, email = lti_request['username'], lti_request['email']
         if not username:
             username = "test_username"
         password = "test_password"
 
-        user = User.objects.create_user(username=username, email=username+'@test.com', password=password)
+        user = User.objects.create_user(username=username, email=username + '@test.com', password=password)
         authenticated = authenticate(username=username, password=password)
         login(request, authenticated)
 
@@ -165,16 +174,22 @@ class AuthenticationHookTests(LtiRequestsTestBase):
         LTIView.register_authentication_hook(hook)
         payload = self.get_correct_lti_payload()
         self.send_lti_request(payload)
-        request = hook.call_args[0][0]
+        request, lti_payload = hook.call_args[0]
         self.assertEqual(request.body, payload)
         self.assertFalse(request.user.is_authenticated())
+        expected_lti_data = {
+            'username': self._data['lis_person_sourcedid'],
+            'email': self._data['lis_person_contact_email_primary'],
+            'user_id': self._data['user_id'],
+        }
+        self.assertEqual(lti_payload, expected_lti_data)
 
     def test_anonymous_lti_is_processed_if_hook_does_not_authenticate_user(self):
         hook = Mock()
         LTIView.register_authentication_hook(hook)
         response = self.send_lti_request(self.get_correct_lti_payload())
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, self._url_base + reverse('django.contrib.auth.views.login')+'?next=lti')
+        self.assertEqual(response.url, self._url_base + reverse('django.contrib.auth.views.login') + '?next=lti')
         self.assertIn('lti_parameters', self.client.session)
         session_lti_params = self.client.session['lti_parameters']
         for key, value in self._data.items():
@@ -187,3 +202,28 @@ class AuthenticationHookTests(LtiRequestsTestBase):
         expected_user = hook.call_args[0][0].user
 
         self._verify_lti_created_and_redirected_to_home(response, expected_user, self._data)
+
+
+class RouteResolversTests(LtiRequestsTestBase):
+    fixtures = ['test_auth.yaml']
+    urls = 'django_lti_tool_provider.tests.test_url_collections.minimal'
+
+    def test_anonymous_request_redirects_to_root(self):
+        self._logout()
+        response = self.send_lti_request(self.get_correct_lti_payload())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self._url_base + '/')
+
+    @override_settings(REDIRECT_AFTER_LTI="not_a_home")
+    def test_authenticated_resolves_redirect_by_name(self):
+        self._authenticate()
+        response = self.send_lti_request(self.get_correct_lti_payload())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self._url_base + '/other_url')
+
+    @override_settings(REDIRECT_AFTER_LTI="other_url")
+    def test_authenticated_resolves_redirect_by_url(self):
+        self._authenticate()
+        response = self.send_lti_request(self.get_correct_lti_payload())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self._url_base + '/other_url')
