@@ -51,7 +51,7 @@ setup(
         'Django>=1.8',
         'oauth2>=1.5.211',
         'jsonfield',
-        'ims_lti_py>0.6'  # PyPi version is broken, install via requirements.txt
+        'ims_lti_py'  # PyPi version is broken, install via requirements.txt
     ],
     package_data=package_data("django_lti_tool_provider", []),
     classifiers=[
