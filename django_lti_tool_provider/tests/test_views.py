@@ -71,8 +71,11 @@ class LtiRequestsTestBase(TestCase):
 
     def _verify_session_lti_contents(self, session, expected):
         self.assertIn('lti_parameters', session)
+        self._verify_lti_data(session['lti_parameters'], expected)
+
+    def _verify_lti_data(self, actual, expected):
         for key, value in expected.items():
-            self.assertEqual(value, session['lti_parameters'][key])
+            self.assertEqual(value, actual[key])
 
     def _verify_lti_created(self, user, expected_lti_data):
         lti_data = LtiUserData.objects.get(user=user)
@@ -214,8 +217,9 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         self._verify_session_lti_contents(self.client.session, self._data)
 
         # verifying correct parameters were passed to auth manager hook
-        request = self.auth_manager.anonymous_redirect_to.call_args[0][0]
+        request, lti_data = self.auth_manager.anonymous_redirect_to.call_args[0]
         self._verify_session_lti_contents(request.session, self._data)
+        self._verify_lti_data(lti_data, self._data)
 
     @ddt.data(*TEST_URLS)
     @ddt.unpack
@@ -228,5 +232,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         self._verify_redirected_to(response, expected_url)
 
         # verifying correct parameters were passed to auth manager hook
-        expected_user = self.auth_manager.authenticated_redirect_to.call_args[0][0].user
-        self._verify_lti_created(expected_user, self._data)
+        request, lti_data = self.auth_manager.authenticated_redirect_to.call_args[0]
+        user = request.user
+        self._verify_lti_created(user, self._data)
+        self._verify_lti_data(lti_data, self._data)

@@ -96,14 +96,14 @@ class LTIView(View):
         request is gone. So we save important parts of it into session to retrieve when authentication happens
         """
         try:
-            parameters = cls._get_lti_parameters_from_request(request)
+            lti_parameters = cls._get_lti_parameters_from_request(request)
         except oauth2.Error, e:
             _logger.exception(u"Invalid LTI Request")
             return HttpResponseBadRequest(u"Invalid LTI Request: " + e.message)
 
-        request.session[cls.SESSION_KEY] = parameters
+        request.session[cls.SESSION_KEY] = lti_parameters
         request.session.save()
-        return HttpResponseRedirect(cls.authentication_manager.anonymous_redirect_to(request))
+        return HttpResponseRedirect(cls.authentication_manager.anonymous_redirect_to(request, lti_parameters))
 
     @classmethod
     def process_authenticated_lti(cls, request):
@@ -129,7 +129,7 @@ class LTIView(View):
         lti_data = cls._store_lti_parameters(request.user, lti_parameters)
         Signals.LTI.received.send(cls, user=request.user, lti_data=lti_data)
 
-        return HttpResponseRedirect(cls.authentication_manager.authenticated_redirect_to(request))
+        return HttpResponseRedirect(cls.authentication_manager.authenticated_redirect_to(request, lti_parameters))
 
     @classmethod
     def _is_new_lti_request(cls, request):
