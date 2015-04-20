@@ -31,6 +31,12 @@ class LtiRequestsTestBase(TestCase):
 
     DEFAULT_REDIRECT = '/home'
 
+    def setUp(self):
+        self.client = Client()
+        self.hook_manager = Mock(spec=AbstractApplicationHookManager)
+        self.hook_manager.vary_by_key = Mock(return_value=None)
+        LTIView.register_authentication_manager(self.hook_manager)
+
     @property
     def consumer(self):
         return Consumer(settings.CONSUMER_KEY, settings.LTI_SECRET)
@@ -77,19 +83,19 @@ class LtiRequestsTestBase(TestCase):
         for key, value in expected.items():
             self.assertEqual(value, actual[key])
 
-    def _verify_lti_created(self, user, expected_lti_data):
-        lti_data = LtiUserData.objects.get(user=user)
+    def _verify_lti_created(self, user, expected_lti_data, custom_key=None):
+        key = custom_key if custom_key else ''
+        lti_data = LtiUserData.objects.get(user=user, custom_key=key)
         self.assertIsNotNone(lti_data)
+        self.assertEqual(lti_data.custom_key, key)
         for key, value in expected_lti_data.items():
             self.assertEqual(value, lti_data.edx_lti_parameters[key])
 
 
 class AnonymousLtiRequestTests(LtiRequestsTestBase):
     def setUp(self):
-        self.client = Client()
-        self.auth_manager = Mock(spec=AbstractApplicationHookManager)
-        self.auth_manager.anonymous_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
-        LTIView.register_authentication_manager(self.auth_manager)
+        super(AnonymousLtiRequestTests, self).setUp()
+        self.hook_manager.anonymous_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
 
     def test_given_incorrect_payload_throws_bad_request(self):
         response = self.send_lti_request(self.get_incorrect_lti_payload())
@@ -110,10 +116,9 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
     fixtures = ['test_auth.yaml']
 
     def setUp(self):
+        super(AuthenticatedLtiRequestTests, self).setUp()
         self.user = self._authenticate()
-        self.auth_manager = Mock(spec=AbstractApplicationHookManager)
-        self.auth_manager.authenticated_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
-        LTIView.register_authentication_manager(self.auth_manager)
+        self.hook_manager.authenticated_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
 
     def _verify_lti_updated_signal_is_sent(self, patched_send_lti_received, expected_user):
         expected_lti_data = LtiUserData.objects.get(user=self.user)
@@ -172,9 +177,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
     TEST_URLS = ("/some_url", False), ("/some_other_url", False), ("http://qwe.asd.zxc.com", True)
 
     def setUp(self):
-        self.client = Client()
-        self.auth_manager = Mock(spec=AbstractApplicationHookManager)
-        LTIView.register_authentication_manager(self.auth_manager)
+        super(AuthenticationManagerIntegrationTests, self).setUp()
 
     def tearDown(self):
         LTIView.authentication_manager = None
@@ -194,7 +197,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
     def test_authentication_hook_executed_if_not_authenticated(self):
         payload = self.get_correct_lti_payload()
         self.send_lti_request(payload)
-        args, user_data = self.auth_manager.authentication_hook.call_args
+        args, user_data = self.hook_manager.authentication_hook.call_args
         request = args[0]
         self.assertEqual(request.body, payload)
         self.assertFalse(request.user.is_authenticated())
@@ -208,7 +211,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
     @ddt.data(*TEST_URLS)
     @ddt.unpack
     def test_anonymous_lti_is_processed_if_hook_does_not_authenticate_user(self, url, absolute):
-        self.auth_manager.anonymous_redirect_to.return_value = url
+        self.hook_manager.anonymous_redirect_to.return_value = url
         response = self.send_lti_request(self.get_correct_lti_payload())
 
         expected_url = url if absolute else "{base}{url}".format(base=self._url_base, url=url)
@@ -217,22 +220,33 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         self._verify_session_lti_contents(self.client.session, self._data)
 
         # verifying correct parameters were passed to auth manager hook
-        request, lti_data = self.auth_manager.anonymous_redirect_to.call_args[0]
+        request, lti_data = self.hook_manager.anonymous_redirect_to.call_args[0]
         self._verify_session_lti_contents(request.session, self._data)
         self._verify_lti_data(lti_data, self._data)
 
     @ddt.data(*TEST_URLS)
     @ddt.unpack
     def test_authenticated_lti_is_processed_if_hook_authenticates_user(self, url, absolute):
-        self.auth_manager.authentication_hook.side_effect = self._authenticate_user
-        self.auth_manager.authenticated_redirect_to.return_value = url
+        self.hook_manager.authentication_hook.side_effect = self._authenticate_user
+        self.hook_manager.authenticated_redirect_to.return_value = url
         response = self.send_lti_request(self.get_correct_lti_payload())
 
         expected_url = url if absolute else "{base}{url}".format(base=self._url_base, url=url)
         self._verify_redirected_to(response, expected_url)
 
         # verifying correct parameters were passed to auth manager hook
-        request, lti_data = self.auth_manager.authenticated_redirect_to.call_args[0]
+        request, lti_data = self.hook_manager.authenticated_redirect_to.call_args[0]
         user = request.user
         self._verify_lti_created(user, self._data)
         self._verify_lti_data(lti_data, self._data)
+
+    @ddt.data('custom', 'very custom', 'extremely custom')
+    def test_authenticated_lti_saves_custom_key_if_specified(self, key):
+        self.hook_manager.vary_by_key.return_value = key
+        self.hook_manager.authentication_hook.side_effect = self._authenticate_user
+
+        self.send_lti_request(self.get_correct_lti_payload())
+
+        request, lti_data = self.hook_manager.authenticated_redirect_to.call_args[0]
+        user = request.user
+        self._verify_lti_created(user, self._data, key)

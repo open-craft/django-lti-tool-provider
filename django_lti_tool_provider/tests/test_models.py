@@ -1,4 +1,6 @@
 import ddt
+from django.contrib.auth.models import User
+from django.db import transaction, IntegrityError
 
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -55,3 +57,33 @@ class LtiUserDataTest(TestCase):
         self.model.send_lti_grade(grade)
 
         tool_provider_mock.post_replace_result.assert_called_with(grade)
+
+
+class LtiUserDataDatabaseTest(TestCase):
+    fixtures = ['test_lti_db.yaml']
+
+    def setUp(self):
+        self.user1 = User.objects.get(username='test1')
+        self.user2 = User.objects.get(username='test2')
+
+    def test_user_and_custom_key_uniqueness(self):
+        LtiUserData.objects.create(user=self.user1)  # works
+        LtiUserData.objects.create(user=self.user2)  # works
+
+        LtiUserData.objects.create(user=self.user1, custom_key="123")  # works
+        LtiUserData.objects.create(user=self.user1, custom_key="456")  # works
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LtiUserData.objects.create(user=self.user1)  # unique key exception
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LtiUserData.objects.create(user=self.user1, custom_key="456")  # unique key exception
+
+        LtiUserData.objects.create(user=self.user2, custom_key="123")  # works again
+        LtiUserData.objects.create(user=self.user2, custom_key="456")  # works again
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LtiUserData.objects.create(user=self.user2)  # unique key exception
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LtiUserData.objects.create(user=self.user2, custom_key="456")  # unique key exception

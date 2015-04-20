@@ -76,7 +76,13 @@ class LTIView(View):
             for key, value in parameters.iteritems()
             if 'oauth' not in key
         }
-        lti_user_data, created = LtiUserData.objects.get_or_create(user=user)
+        custom_key = cls.authentication_manager.vary_by_key(lti_params)
+
+        # implicitly tested by test_views
+        if custom_key is None:
+            custom_key = ''
+
+        lti_user_data, created = LtiUserData.objects.get_or_create(user=user, custom_key=custom_key)
         if not created:
             _logger.debug(u"Replaced LTI parameters for user %s", user.username)
         lti_user_data.edx_lti_parameters = lti_params
