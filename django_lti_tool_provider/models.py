@@ -49,7 +49,7 @@ class LtiUserData(models.Model):
     def send_lti_grade(self, grade):
         """ Instantiates DjangoToolProvider using stored lti parameters and sends grade """
         self._validate_lti_grade_request(grade)
-        provider = DjangoToolProvider(settings.CONSUMER_KEY, settings.LTI_SECRET, self.edx_lti_parameters)
+        provider = DjangoToolProvider(settings.LTI_CLIENT_KEY, settings.LTI_CLIENT_SECRET, self.edx_lti_parameters)
         outcome = provider.post_replace_result(grade)
 
         _logger.info(u"LTI grade request was {successful}. Description is {description}".format(

@@ -46,10 +46,10 @@ class LtiUserDataTest(TestCase):
             self.model.send_lti_grade(incorrect_grade)
             self.assertIn("Grade should be in range [0..1]", exc.message)
 
-    @override_settings(CONSUMER_KEY='consumer_key', LTI_SECRET='lti_secret')
+    @override_settings(LTI_CLIENT_KEY='client_key', LTI_CLIENT_SECRET='lti_client_secret')
     def test_send_lti_grade_creates_tool_provider(self, tool_provider_constructor_mock):
         self.model.send_lti_grade(0)
-        tool_provider_constructor_mock.assert_called_with('consumer_key', 'lti_secret', self.model.edx_lti_parameters)
+        tool_provider_constructor_mock.assert_called_with('client_key', 'lti_client_secret', self.model.edx_lti_parameters)
 
     @ddt.data(*[1.0 - i * 0.1 for i in xrange(10, -1, -1)])
     def test_send_lti_grade_sends_replace_result_request(self, grade, tool_provider_constructor_mock):

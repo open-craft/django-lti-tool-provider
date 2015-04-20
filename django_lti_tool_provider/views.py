@@ -62,7 +62,7 @@ class LTIView(View):
 
     @classmethod
     def _get_lti_parameters_from_request(cls, request):
-        provider = DjangoToolProvider(settings.CONSUMER_KEY, settings.LTI_SECRET, request.POST)
+        provider = DjangoToolProvider(settings.LTI_CLIENT_KEY, settings.LTI_CLIENT_SECRET, request.POST)
         provider.valid_request(request)
         return provider.to_params()
 
