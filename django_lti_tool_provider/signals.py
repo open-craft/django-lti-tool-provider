@@ -20,21 +20,26 @@ class Signals(object):
 def grade_updated_handler(sender, **kwargs):
     user = kwargs.get('user', None)
     grade = kwargs.get('grade', None)
-    _send_grade(user, grade)
+    custom_key = kwargs.get('custom_key', None)
+    _send_grade(user, grade, custom_key)
 
 
-def _send_grade(user, grade):
+def _send_grade(user, grade, custom_key):
     try:
         if user is None:
             raise ValueError(u"User is not specified")
-        lti_user_data = LtiUserData.objects.get(user=user)
+        lti_user_data = LtiUserData.objects.get(user=user, custom_key=custom_key)
         lti_user_data.send_lti_grade(grade)
     except LtiUserData.DoesNotExist:
         _logger.info(
-            u"No LTI parameters for user {user} stored - probably never sent an LTI request"
-            .format(user=user.username)
+            u"No LTI parameters for user {user} and key {key} stored - probably never sent an LTI request"
+            .format(user=user.username, key=custom_key)
         )
         raise
     except Exception:  # pylint:disable=too-broad-exception
-        _logger.exception(u"Exception occurred in lti module when sending grade for user {user}.".format(user=user))
+        _logger.exception(
+            u"Exception occurred in lti module when sending grade for user {user} and key {key}.".format(
+                user=user, key=custom_key
+            )
+        )
         raise

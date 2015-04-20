@@ -14,6 +14,7 @@ _logger = logging.getLogger(__name__)
 class LtiUserData(models.Model):
     user = models.OneToOneField(User)
     edx_lti_parameters = JSONField(default={})
+    custom_key = models.CharField(max_length=4000)
 
     class Meta:
         app_label = "django_lti_tool_provider"
