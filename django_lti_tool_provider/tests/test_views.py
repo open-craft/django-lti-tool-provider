@@ -1,6 +1,6 @@
 import ddt
 from django.contrib.auth import login, authenticate
-from django_lti_tool_provider import AbstractAuthenticationManager
+from django_lti_tool_provider import AbstractApplicationHookManager
 from mock import patch, Mock
 
 from oauth2 import Request, Consumer, SignatureMethod_HMAC_SHA1
@@ -87,7 +87,7 @@ class LtiRequestsTestBase(TestCase):
 class AnonymousLtiRequestTests(LtiRequestsTestBase):
     def setUp(self):
         self.client = Client()
-        self.auth_manager = Mock(spec=AbstractAuthenticationManager)
+        self.auth_manager = Mock(spec=AbstractApplicationHookManager)
         self.auth_manager.anonymous_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
         LTIView.register_authentication_manager(self.auth_manager)
 
@@ -111,7 +111,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
 
     def setUp(self):
         self.user = self._authenticate()
-        self.auth_manager = Mock(spec=AbstractAuthenticationManager)
+        self.auth_manager = Mock(spec=AbstractApplicationHookManager)
         self.auth_manager.authenticated_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
         LTIView.register_authentication_manager(self.auth_manager)
 
@@ -173,7 +173,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
 
     def setUp(self):
         self.client = Client()
-        self.auth_manager = Mock(spec=AbstractAuthenticationManager)
+        self.auth_manager = Mock(spec=AbstractApplicationHookManager)
         LTIView.register_authentication_manager(self.auth_manager)
 
     def tearDown(self):
