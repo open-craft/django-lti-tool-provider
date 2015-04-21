@@ -36,8 +36,8 @@ settings.configure(
     ),
     USE_TZ=True,
     SOUTH_TESTS_MIGRATE=True,
-    CONSUMER_KEY='lti_consumer_secret_key',
-    LTI_SECRET='lti_secret_key',
+    LTI_CLIENT_KEY='lti_client_key',
+    LTI_CLIENT_SECRET='lti_client_secret',
     SECRET_KEY='test_secret_key_not_need_to_look_like_actual_secret_key',
 )
 

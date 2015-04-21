@@ -14,7 +14,10 @@ from django_lti_tool_provider.models import LtiUserData
 from django_lti_tool_provider.views import LTIView
 
 
-@override_settings(CONSUMER_KEY='123', LTI_SECRET='456')
+@override_settings(
+    LTI_CLIENT_KEY='qertyuiop1234567890!@#$%^&*()_+[];',
+    LTI_CLIENT_SECRET='1234567890!@#$%^&*()_+[];./,;qwertyuiop'
+)
 class LtiRequestsTestBase(TestCase):
     _data = {
         "lis_result_sourcedid": "lis_result_sourcedid",
@@ -39,7 +42,7 @@ class LtiRequestsTestBase(TestCase):
 
     @property
     def consumer(self):
-        return Consumer(settings.CONSUMER_KEY, settings.LTI_SECRET)
+        return Consumer(settings.LTI_CLIENT_KEY, settings.LTI_CLIENT_SECRET)
 
     def _get_signed_oauth_request(self, path, method, data=None):
         data = data if data is not None else self._data

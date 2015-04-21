@@ -45,13 +45,14 @@ class LTIView(View):
         if not request.user.is_authenticated():
             try:
                 lti_parameters = self._get_lti_parameters_from_request(request)
-                lti_data = {
-                    hook_name: lti_parameters.get(lti_name, None)
-                    for lti_name, hook_name in self.PASS_TO_AUTHENTICATION_HOOK.items()
-                }
             except oauth2.Error, e:
                 _logger.exception(u"Invalid LTI Request")
                 return HttpResponseBadRequest(u"Invalid LTI Request: " + e.message)
+
+            lti_data = {
+                hook_name: lti_parameters.get(lti_name, None)
+                for lti_name, hook_name in self.PASS_TO_AUTHENTICATION_HOOK.items()
+            }
 
             self.authentication_manager.authentication_hook(request, **lti_data)
 
