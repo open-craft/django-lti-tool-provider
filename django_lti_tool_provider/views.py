@@ -12,7 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ims_lti_py.tool_provider import DjangoToolProvider
 
-from django_lti_tool_provider.models import LtiUserData
+from django_lti_tool_provider.models import LtiUserData, WrongUserError
 from django_lti_tool_provider.signals import Signals
 
 
