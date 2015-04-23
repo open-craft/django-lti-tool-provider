@@ -1,5 +1,6 @@
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.decorators import method_decorator
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import View
 import oauth2
 import logging
@@ -30,6 +31,7 @@ class LTIView(View):
     SESSION_KEY = 'lti_parameters'
 
     @method_decorator(csrf_exempt)
+    @method_decorator(xframe_options_exempt)
     def dispatch(self, *args, **kwargs):
         if self.authentication_manager is None:
             raise ImproperlyConfigured(u"AuthenticationManager is not set")
