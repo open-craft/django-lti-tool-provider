@@ -57,3 +57,36 @@ class LtiUserData(models.Model):
         ))
 
         return outcome
+
+    @classmethod
+    def get_or_create_by_parameters(cls, user, authentication_manager, lti_params):
+        """
+        Filters out OAuth parameters
+        """
+        custom_key = authentication_manager.vary_by_key(lti_params)
+
+        # implicitly tested by test_views
+        if custom_key is None:
+            custom_key = ''
+
+        lti_user_data, created = LtiUserData.objects.get_or_create(user=user, custom_key=custom_key)
+
+        if lti_user_data.edx_lti_parameters.get('user_id', lti_params['user_id']) != lti_params['user_id']:
+            # TODO: not covered by test
+            message = u"LTI parameters for user found, but anonymous user id does not match. "
+            _logger.error(message)
+            raise ValueError(message)
+
+        return lti_user_data, created
+
+    @classmethod
+    def store_lti_parameters(cls, user, authentication_manager, lti_params):
+        """
+        tores LTI parameters into the DB, creating or updating record as needed
+        """
+        lti_user_data, created = cls.get_or_create_by_parameters(user, authentication_manager, lti_params)
+        lti_user_data.edx_lti_parameters = lti_params
+        if not created:
+            _logger.debug(u"Replaced LTI parameters for user %s", user.username)
+        lti_user_data.save()
+        return lti_user_data
