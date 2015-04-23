@@ -1,4 +1,5 @@
 from django.core.exceptions import ImproperlyConfigured
+from django.utils.decorators import method_decorator
 from django.views.generic import View
 import oauth2
 import logging
@@ -28,7 +29,7 @@ class LTIView(View):
 
     SESSION_KEY = 'lti_parameters'
 
-    @csrf_exempt
+    @method_decorator(csrf_exempt)
     def dispatch(self, *args, **kwargs):
         if self.authentication_manager is None:
             raise ImproperlyConfigured(u"AuthenticationManager is not set")
@@ -54,6 +55,8 @@ class LTIView(View):
                 for lti_name, hook_name in self.PASS_TO_AUTHENTICATION_HOOK.items()
             }
 
+            _logger.debug(u"Executing authentication hook with parameters {params}", lti_data)
+
             self.authentication_manager.authentication_hook(request, **lti_data)
 
         if request.user.is_authenticated():
@@ -72,6 +75,7 @@ class LTIView(View):
         """
         Filters out OAuth parameters than stores LTI parameters into the DB, creating or updating record as needed
         """
+        # TODO: this method got complicated - move into model/model manager
         lti_params = {
             key: value
             for key, value in parameters.iteritems()
@@ -86,6 +90,13 @@ class LTIView(View):
         lti_user_data, created = LtiUserData.objects.get_or_create(user=user, custom_key=custom_key)
         if not created:
             _logger.debug(u"Replaced LTI parameters for user %s", user.username)
+
+        if lti_user_data.edx_lti_parameters.get('user_id', lti_params['user_id']) != lti_params['user_id']:
+            # TODO: not covered by test
+            message = u"LTI parameters for user found, but anonymous user id does not match. " \
+                      u"This might be caused by stale cookies. Clear browser cookies and try again"
+            _logger.error(message)
+            raise ValueError(message)
         lti_user_data.edx_lti_parameters = lti_params
         lti_user_data.save()
         return lti_user_data
