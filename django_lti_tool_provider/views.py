@@ -93,9 +93,10 @@ class LTIView(View):
             if created:
                 # If this is the first time the user's data is being created, that means
                 # that the user predated the LTI request.
+                info.delete()
                 return False
             return True
-        except ValueError:
+        except WrongUserError:
             return False
 
     @classmethod

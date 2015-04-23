@@ -1,6 +1,6 @@
 import ddt
 from django.contrib.auth import login, authenticate
-from django.utils.importlib import import_module
+from importlib import import_module
 from django_lti_tool_provider import AbstractApplicationHookManager
 from mock import patch, Mock
 
@@ -194,6 +194,8 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         LTIView.as_view()(request)
         self.assertEqual(request.user, user)
         self.assertEqual(user, new_user)
+
+        self.assertEqual(LtiUserData.objects.all().count(), 1)
 
 @ddt.ddt
 class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
