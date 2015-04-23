@@ -1,3 +1,4 @@
+from django.contrib.auth import logout
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
@@ -11,7 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ims_lti_py.tool_provider import DjangoToolProvider
 
-from django_lti_tool_provider.models import LtiUserData
+from django_lti_tool_provider.models import LtiUserData, WrongUserError
 from django_lti_tool_provider.signals import Signals
 
 
@@ -45,10 +46,19 @@ class LTIView(View):
         return self.process_request(request)
 
     def process_request(self, request):
+        if request.user.is_authenticated():
+            try:
+                lti_parameters = self._get_lti_parameters_from_request(request)
+                if not self._right_user(request.user, lti_parameters):
+                    _logger.debug(u"Logging out user %s in favor of new LTI session.", request.user.username)
+                    logout(request)
+            except (oauth2.Error, AttributeError):
+                # Not a new visit, or better to keep existing auth.
+                pass
         if not request.user.is_authenticated():
             try:
                 lti_parameters = self._get_lti_parameters_from_request(request)
-            except oauth2.Error, e:
+            except oauth2.Error as e:
                 _logger.exception(u"Invalid LTI Request")
                 return HttpResponseBadRequest(u"Invalid LTI Request: " + e.message)
 
@@ -67,41 +77,33 @@ class LTIView(View):
             return self.process_anonymous_lti(request)
 
     @classmethod
-    def _get_lti_parameters_from_request(cls, request):
-        provider = DjangoToolProvider(settings.LTI_CLIENT_KEY, settings.LTI_CLIENT_SECRET, request.POST)
-        provider.valid_request(request)
-        return provider.to_params()
-
-    @classmethod
-    def _store_lti_parameters(cls, user, parameters):
-        """
-        Filters out OAuth parameters than stores LTI parameters into the DB, creating or updating record as needed
-        """
-        # TODO: this method got complicated - move into model/model manager
-        lti_params = {
+    def lti_param_filter(cls, parameters):
+        return {
             key: value
             for key, value in parameters.iteritems()
             if 'oauth' not in key
         }
-        custom_key = cls.authentication_manager.vary_by_key(lti_params)
 
-        # implicitly tested by test_views
-        if custom_key is None:
-            custom_key = ''
+    @classmethod
+    def _right_user(cls, user, lti_parameters):
+        try:
+            info, created = LtiUserData.get_or_create_by_parameters(
+                user, cls.authentication_manager, cls.lti_param_filter(lti_parameters)
+            )
+            if created:
+                # If this is the first time the user's data is being created, that means
+                # that the user predated the LTI request.
+                info.delete()
+                return False
+            return True
+        except WrongUserError:
+            return False
 
-        lti_user_data, created = LtiUserData.objects.get_or_create(user=user, custom_key=custom_key)
-        if not created:
-            _logger.debug(u"Replaced LTI parameters for user %s", user.username)
-
-        if lti_user_data.edx_lti_parameters.get('user_id', lti_params['user_id']) != lti_params['user_id']:
-            # TODO: not covered by test
-            message = u"LTI parameters for user found, but anonymous user id does not match. " \
-                      u"This might be caused by stale cookies. Clear browser cookies and try again"
-            _logger.error(message)
-            raise ValueError(message)
-        lti_user_data.edx_lti_parameters = lti_params
-        lti_user_data.save()
-        return lti_user_data
+    @classmethod
+    def _get_lti_parameters_from_request(cls, request):
+        provider = DjangoToolProvider(settings.LTI_CLIENT_KEY, settings.LTI_CLIENT_SECRET, request.POST)
+        provider.valid_request(request)
+        return provider.to_params()
 
     @classmethod
     def register_authentication_manager(cls, manager):
@@ -146,7 +148,9 @@ class LTIView(View):
                 _logger.exception(u"Invalid LTI Request")
                 return HttpResponseBadRequest(u"Invalid LTI Request: " + e.message)
 
-        lti_data = cls._store_lti_parameters(request.user, lti_parameters)
+        lti_data = LtiUserData.store_lti_parameters(
+            request.user, cls.authentication_manager, cls.lti_param_filter(lti_parameters)
+        )
         Signals.LTI.received.send(cls, user=request.user, lti_data=lti_data)
 
         return HttpResponseRedirect(cls.authentication_manager.authenticated_redirect_to(request, lti_parameters))

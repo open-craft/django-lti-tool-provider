@@ -1,5 +1,6 @@
 import ddt
 from django.contrib.auth import login, authenticate
+from importlib import import_module
 from django_lti_tool_provider import AbstractApplicationHookManager
 from mock import patch, Mock
 
@@ -7,7 +8,7 @@ from oauth2 import Request, Consumer, SignatureMethod_HMAC_SHA1
 
 from django.contrib.auth.models import User
 from django.test.utils import override_settings
-from django.test import Client, TestCase
+from django.test import Client, TestCase, RequestFactory
 from django.conf import settings
 
 from django_lti_tool_provider.models import LtiUserData
@@ -61,13 +62,15 @@ class LtiRequestsTestBase(TestCase):
         req['oauth_signature'] += '_broken'
         return req.to_postdata()
 
-    def send_lti_request(self, payload):
-        return self.client.post('/lti/', payload, content_type='application/x-www-form-urlencoded')
+    def send_lti_request(self, payload, client=None):
+        if not client:
+            client = self.client
+        return client.post('/lti/', payload, content_type='application/x-www-form-urlencoded')
 
-    def _authenticate(self):
+    def _authenticate(self, username='test'):
         self.client = Client()
-        user = User.objects.get(username='test')
-        logged_in = self.client.login(username='test', password='test')
+        user = User.objects.get(username=username)
+        logged_in = self.client.login(username=username, password='test')
         self.assertTrue(logged_in)
         return user
 
@@ -113,18 +116,23 @@ class AnonymousLtiRequestTests(LtiRequestsTestBase):
         self._verify_session_lti_contents(self.client.session, self._data)
 
 
+def authentication_hook(request, user_id=None, username=None, email=None):
+    user = User.objects.create_user(username or user_id, password='1234', email=email)
+    user.save()
+    user = authenticate(username=user.username, password='1234')
+    login(request, user)
+    return user
+
 @ddt.ddt
 @patch('django_lti_tool_provider.views.Signals.LTI.received.send')
 class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
-    fixtures = ['test_auth.yaml']
-
     def setUp(self):
         super(AuthenticatedLtiRequestTests, self).setUp()
-        self.user = self._authenticate()
         self.hook_manager.authenticated_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
+        self.hook_manager.authentication_hook = authentication_hook
 
     def _verify_lti_updated_signal_is_sent(self, patched_send_lti_received, expected_user):
-        expected_lti_data = LtiUserData.objects.get(user=self.user)
+        expected_lti_data = LtiUserData.objects.get(user=expected_user)
         patched_send_lti_received.assert_called_once_with(LTIView, user=expected_user, lti_data=expected_lti_data)
 
     def test_no_session_given_incorrect_payload_throws_bad_request(self, _):
@@ -133,36 +141,20 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         self.assertIn("Invalid LTI Request", response.content)
 
     def test_no_session_correct_payload_processes_lti_request(self, patched_send_lti_received):
-        with self.assertRaises(LtiUserData.DoesNotExist):
-            LtiUserData.objects.get(user=self.user)  # precondition check
+        # Precondition check
+        self.assertFalse(LtiUserData.objects.all())
 
         response = self.send_lti_request(self.get_correct_lti_payload())
 
-        self._verify_lti_created(self.user, self._data)
+        # Should have been created.
+        user = User.objects.all()[0]
+        self._verify_lti_created(user, self._data)
         self._verify_redirected_to(response, self._url_base + self.DEFAULT_REDIRECT)
-        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
-
-    @ddt.data('GET', 'POST')
-    def test_session_set_processes_lti_request(self, method, patched_send_lti_received):
-        with self.assertRaises(LtiUserData.DoesNotExist):
-            LtiUserData.objects.get(user=self.user)  # precondition check
-
-        session = self.client.session
-        session['lti_parameters'] = self._data
-        session.save()
-
-        if method == 'GET':
-            response = self.client.get('/lti/')
-        else:
-            response = self.client.post('/lti/')
-
-        self._verify_lti_created(self.user, self._data)
-        self._verify_redirected_to(response, self._url_base + self.DEFAULT_REDIRECT)
-        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
+        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, user)
 
     def test_given_session_and_lti_uses_lti(self, patched_send_lti_received):
-        with self.assertRaises(LtiUserData.DoesNotExist):
-            LtiUserData.objects.get(user=self.user)  # precondition check
+        # Precondition check
+        self.assertFalse(LtiUserData.objects.all())
 
         session = self.client.session
         session['lti_parameters'] = {}
@@ -170,10 +162,40 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
 
         response = self.send_lti_request(self.get_correct_lti_payload())
 
-        self._verify_lti_created(self.user, self._data)
+        # Should have been created.
+        user = User.objects.all()[0]
+        self._verify_lti_created(user, self._data)
         self._verify_redirected_to(response, self._url_base + self.DEFAULT_REDIRECT)
-        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, self.user)
+        self._verify_lti_updated_signal_is_sent(patched_send_lti_received, user)
 
+    def test_force_login_change(self, patched_send_lti_received):
+        self.assertFalse(User.objects.exclude(id=1))
+        payload = self.get_correct_lti_payload()
+        request = self.send_lti_request(payload, client=RequestFactory())
+        engine = import_module(settings.SESSION_ENGINE)
+        request.session = engine.SessionStore()
+        request.user = None
+        user = authentication_hook(request, username='goober')
+        request.session.save()
+        self.assertEqual(request.user, user)
+        LTIView.as_view()(request)
+        # New user creation not actually available during tests.
+        self.assertTrue(request.user)
+        new_user = User.objects.exclude(username='goober')[0]
+        self.assertEqual(request.user, new_user)
+
+        # Verify a new user is not created with the same data if re-visiting.
+        request = self.send_lti_request(payload, client=RequestFactory())
+        request.session = engine.SessionStore()
+        request.user = None
+        user = authenticate(username=new_user.username, password='1234')
+        self.assertTrue(user)
+        login(request, user)
+        LTIView.as_view()(request)
+        self.assertEqual(request.user, user)
+        self.assertEqual(user, new_user)
+
+        self.assertEqual(LtiUserData.objects.all().count(), 1)
 
 @ddt.ddt
 class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
