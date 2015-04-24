@@ -63,8 +63,7 @@ class LtiRequestsTestBase(TestCase):
         return req.to_postdata()
 
     def send_lti_request(self, payload, client=None):
-        if not client:
-            client = self.client
+        client = client or self.client
         return client.post('/lti/', payload, content_type='application/x-www-form-urlencoded')
 
     def _authenticate(self, username='test'):
