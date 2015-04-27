@@ -63,9 +63,13 @@ class LtiUserData(models.Model):
         return outcome
 
     @classmethod
-    def get_or_create_by_parameters(cls, user, authentication_manager, lti_params):
+    def get_or_create_by_parameters(cls, user, authentication_manager, lti_params, create=True):
         """
-        Filters out OAuth parameters
+        Gets a user's LTI user data, creating the user if they do not exist. If create is False,
+        it will raise LtiUserData.DoesNotExist should no data exist for the user.
+
+        This function also does a bit of sanity checking to make sure the current user_id matches
+        the stored lti user_id, raising WrongUserError if not.
         """
         custom_key = authentication_manager.vary_by_key(lti_params)
 
@@ -73,7 +77,12 @@ class LtiUserData(models.Model):
         if custom_key is None:
             custom_key = ''
 
-        lti_user_data, created = LtiUserData.objects.get_or_create(user=user, custom_key=custom_key)
+        if create:
+            lti_user_data, created = LtiUserData.objects.get_or_create(user=user, custom_key=custom_key)
+        else:
+            # Could omit it, but it would change the signature.
+            created = False
+            lti_user_data = LtiUserData.objects.get(user=user, custom_key=custom_key)
 
         if lti_user_data.edx_lti_parameters.get('user_id', lti_params['user_id']) != lti_params['user_id']:
             # TODO: not covered by test

@@ -88,7 +88,7 @@ class LTIView(View):
     def _right_user(cls, user, lti_parameters):
         try:
             info, created = LtiUserData.get_or_create_by_parameters(
-                user, cls.authentication_manager, cls.lti_param_filter(lti_parameters)
+                user, cls.authentication_manager, cls.lti_param_filter(lti_parameters), create=False
             )
             if created:
                 # If this is the first time the user's data is being created, that means
@@ -96,7 +96,7 @@ class LTIView(View):
                 info.delete()
                 return False
             return True
-        except WrongUserError:
+        except (WrongUserError, LtiUserData.DoesNotExist):
             return False
 
     @classmethod
