@@ -29,7 +29,8 @@ def _send_grade(user, grade, custom_key):
         if user is None:
             raise ValueError(u"User is not specified")
         lti_user_data = LtiUserData.objects.get(user=user, custom_key=custom_key)
-        lti_user_data.send_lti_grade(grade)
+        outcome_response = lti_user_data.send_lti_grade(grade)
+        _logger.debug(vars(outcome_response))
     except LtiUserData.DoesNotExist:
         _logger.info(
             u"No LTI parameters for user {user} and key {key} stored - probably never sent an LTI request"
