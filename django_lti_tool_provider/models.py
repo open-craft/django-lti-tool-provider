@@ -18,7 +18,7 @@ class WrongUserError(Exception):
 class LtiUserData(models.Model):
     user = models.ForeignKey(User)
     edx_lti_parameters = JSONField(default={})
-    custom_key = models.CharField(max_length=400, null=False, default='')
+    custom_key = models.CharField(max_length=190, null=False, default='')
 
     class Meta:
         app_label = "django_lti_tool_provider"

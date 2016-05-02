@@ -42,7 +42,7 @@ def package_data(pkg, root_list):
 # Main ##############################################################
 setup(
     name='django_lti_tool_provider',
-    version='0.1',
+    version='0.1.1',
     license="GNU AFFERO GENERAL PUBLIC LICENSE",
     description='IMS LTI Tool Provider Django Applocation',
     long_description=README,
