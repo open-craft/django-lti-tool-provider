@@ -7,6 +7,9 @@ from six import add_metaclass
 logging.getLogger("").addHandler(logging.NullHandler())
 
 
+# pylint: disable=unused-argument
+# This class specifies method signatures; while pylint is intelligent enough to ignore unused args in abstractmethods
+# methods with default implementations are still reported. Hence we suppress unused-argument for entire class
 @add_metaclass(ABCMeta)
 class AbstractApplicationHookManager(object):
     """ Class that performs authentication and redirection for LTI views """

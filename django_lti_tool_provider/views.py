@@ -72,7 +72,7 @@ class LTIView(View):
                 for lti_name, hook_name in lti_parameters_mapping.iteritems()
             }
 
-            _logger.debug(u"Executing authentication hook with parameters {params}", lti_data)
+            _logger.debug(u"Executing authentication hook with parameters %s", lti_data)
 
             self.authentication_manager.authentication_hook(request, **lti_data)
 

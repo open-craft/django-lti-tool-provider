@@ -56,9 +56,10 @@ class LtiUserData(models.Model):
         provider = DjangoToolProvider(settings.LTI_CLIENT_KEY, settings.LTI_CLIENT_SECRET, self.edx_lti_parameters)
         outcome = provider.post_replace_result(grade)
 
-        _logger.info(u"LTI grade request was {successful}. Description is {description}".format(
-            successful="successful" if outcome.is_success() else "unsuccessful", description=outcome.description
-        ))
+        _logger.info(
+            u"LTI grade request was %(successful)s. Description is %(description)s",
+            dict(successful="successful" if outcome.is_success() else "unsuccessful", description=outcome.description)
+        )
 
         return outcome
 
@@ -103,3 +104,8 @@ class LtiUserData(models.Model):
             _logger.debug(u"Replaced LTI parameters for user %s", user.username)
         lti_user_data.save()
         return lti_user_data
+
+    def __unicode__(self):
+        return u"{classname} for {user} and (vary_key: {custom_key})".format(
+            classname=self.__class__.__name__, user=self.user, custom_key=self.custom_key
+        )

@@ -10,3 +10,4 @@ six
 # test requirements
 mock
 ddt
+prospector
