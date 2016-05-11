@@ -11,7 +11,7 @@ logging.getLogger("").addHandler(logging.NullHandler())
 class AbstractApplicationHookManager(object):
     """ Class that performs authentication and redirection for LTI views """
     @abstractmethod
-    def authentication_hook(self, request, user_id=None, username=None, email=None):
+    def authentication_hook(self, request, user_id=None, username=None, email=None, **kwargs):
         """ Hook to authenticate user from data available in LTI request """
 
     @abstractmethod
@@ -39,3 +39,18 @@ class AbstractApplicationHookManager(object):
         ordinary field.
         """
         return None
+
+    def optional_lti_parameters(self):
+        """
+        Return a dictionary of LTI parameters supported/required by this AuthenticationHookManager in addition
+        to user_id, username and email. These parameters are passed to authentication_hook method via kwargs.
+
+        This dictionary should have LTI parameter names (as specified by LTI specification) as keys; values are used
+        as parameter names passed to authentication_hook method, i.e. it allows renaming (not always intuitive) LTI spec
+        parameter names.
+
+        Example:
+            # renames lis_person_name_given -> user_first_name, lis_person_name_family -> user_lat_name
+            {'lis_person_name_given': 'user_first_name', 'lis_person_name_family': 'user_lat_name'}
+        """
+        return {}

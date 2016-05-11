@@ -24,6 +24,7 @@ class LtiRequestsTestBase(TestCase):
         "lis_result_sourcedid": "lis_result_sourcedid",
         "context_id": "LTIX/LTI-101/now",
         "user_id": "1234567890",
+        "roles": ["Student"],
         "lis_outcome_service_url": "lis_outcome_service_url",
         "resource_link_id": "resource_link_id",
         "lti_version": "LTI-1p0",
@@ -39,6 +40,7 @@ class LtiRequestsTestBase(TestCase):
         self.client = Client()
         self.hook_manager = Mock(spec=AbstractApplicationHookManager)
         self.hook_manager.vary_by_key = Mock(return_value=None)
+        self.hook_manager.optional_lti_parameters = Mock(return_value={})
         LTIView.register_authentication_manager(self.hook_manager)
 
     @property
@@ -115,20 +117,20 @@ class AnonymousLtiRequestTests(LtiRequestsTestBase):
         self._verify_session_lti_contents(self.client.session, self._data)
 
 
-def authentication_hook(request, user_id=None, username=None, email=None):
-    user = User.objects.create_user(username or user_id, password='1234', email=email)
-    user.save()
-    user = authenticate(username=user.username, password='1234')
-    login(request, user)
-    return user
-
 @ddt.ddt
 @patch('django_lti_tool_provider.views.Signals.LTI.received.send')
 class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
+    def _authentication_hook(self, request, user_id=None, username=None, email=None, **kwargs):
+        user = User.objects.create_user(username or user_id, password='1234', email=email)
+        user.save()
+        user = authenticate(username=user.username, password='1234')
+        login(request, user)
+        return user
+
     def setUp(self):
         super(AuthenticatedLtiRequestTests, self).setUp()
         self.hook_manager.authenticated_redirect_to = Mock(return_value=self.DEFAULT_REDIRECT)
-        self.hook_manager.authentication_hook = authentication_hook
+        self.hook_manager.authentication_hook = self._authentication_hook
 
     def _verify_lti_updated_signal_is_sent(self, patched_send_lti_received, expected_user):
         expected_lti_data = LtiUserData.objects.get(user=expected_user)
@@ -174,7 +176,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         engine = import_module(settings.SESSION_ENGINE)
         request.session = engine.SessionStore()
         request.user = None
-        user = authentication_hook(request, username='goober')
+        user = self._authentication_hook(request, username='goober')
         request.session.save()
         self.assertEqual(request.user, user)
         LTIView.as_view()(request)
@@ -207,7 +209,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         LTIView.authentication_manager = None
         self._logout()
 
-    def _authenticate_user(self, request, user_id=None, username=None, email=None):
+    def _authenticate_user(self, request, user_id=None, username=None, email=None, **kwargs):
         if not username:
             username = "test_username"
         password = "test_password"
@@ -229,6 +231,23 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
             'username': self._data['lis_person_sourcedid'],
             'email': self._data['lis_person_contact_email_primary'],
             'user_id': self._data['user_id'],
+        }
+        self.assertEqual(user_data, expected_user_data)
+
+    def test_authentication_hook_passes_optional_lti_data(self):
+        payload = self.get_correct_lti_payload()
+        self.hook_manager.optional_lti_parameters.return_value = {'resource_link_id': 'link_id', 'roles': 'roles'}
+        self.send_lti_request(payload)
+        args, user_data = self.hook_manager.authentication_hook.call_args
+        request = args[0]
+        self.assertEqual(request.body, payload)
+        self.assertFalse(request.user.is_authenticated())
+        expected_user_data = {
+            'username': self._data['lis_person_sourcedid'],
+            'email': self._data['lis_person_contact_email_primary'],
+            'user_id': self._data['user_id'],
+            'link_id': 'resource_link_id',
+            'roles': ['Student']
         }
         self.assertEqual(user_data, expected_user_data)
 
