@@ -62,12 +62,19 @@ class LTIView(View):
                 _logger.exception(u"Invalid LTI Request")
                 return HttpResponseBadRequest(u"Invalid LTI Request: " + e.message)
 
+            lti_parameters_mapping = self.PASS_TO_AUTHENTICATION_HOOK.copy()
+
             lti_data = {
                 hook_name: lti_parameters.get(lti_name, None)
-                for lti_name, hook_name in self.PASS_TO_AUTHENTICATION_HOOK.items()
+                for lti_name, hook_name in lti_parameters_mapping.iteritems()
             }
 
-            _logger.debug(u"Executing authentication hook with parameters {params}", lti_data)
+            lti_data['extra_params'] = {
+                hook_name: lti_parameters.get(lti_name, None)
+                for lti_name, hook_name in self.authentication_manager.optional_lti_parameters().iteritems()
+            }
+
+            _logger.debug(u"Executing authentication hook with parameters %s", lti_data)
 
             self.authentication_manager.authentication_hook(request, **lti_data)
 
