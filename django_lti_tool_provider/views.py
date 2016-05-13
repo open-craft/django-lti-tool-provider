@@ -63,13 +63,15 @@ class LTIView(View):
                 return HttpResponseBadRequest(u"Invalid LTI Request: " + e.message)
 
             lti_parameters_mapping = self.PASS_TO_AUTHENTICATION_HOOK.copy()
-            optional_lti_parameters = self.authentication_manager.optional_lti_parameters()
-            if optional_lti_parameters:
-                lti_parameters_mapping.update(optional_lti_parameters)
 
             lti_data = {
                 hook_name: lti_parameters.get(lti_name, None)
                 for lti_name, hook_name in lti_parameters_mapping.iteritems()
+            }
+
+            lti_data['extra_params'] = {
+                hook_name: lti_parameters.get(lti_name, None)
+                for lti_name, hook_name in self.authentication_manager.optional_lti_parameters().iteritems()
             }
 
             _logger.debug(u"Executing authentication hook with parameters %s", lti_data)

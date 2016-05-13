@@ -14,7 +14,7 @@ logging.getLogger("").addHandler(logging.NullHandler())
 class AbstractApplicationHookManager(object):
     """ Class that performs authentication and redirection for LTI views """
     @abstractmethod
-    def authentication_hook(self, request, user_id=None, username=None, email=None, **kwargs):
+    def authentication_hook(self, request, user_id=None, username=None, email=None, extra_params=None):
         """ Hook to authenticate user from data available in LTI request """
 
     @abstractmethod

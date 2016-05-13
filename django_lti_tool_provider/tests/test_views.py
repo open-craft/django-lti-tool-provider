@@ -231,6 +231,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
             'username': self._data['lis_person_sourcedid'],
             'email': self._data['lis_person_contact_email_primary'],
             'user_id': self._data['user_id'],
+            'extra_params': {}
         }
         self.assertEqual(user_data, expected_user_data)
 
@@ -246,8 +247,10 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
             'username': self._data['lis_person_sourcedid'],
             'email': self._data['lis_person_contact_email_primary'],
             'user_id': self._data['user_id'],
-            'link_id': 'resource_link_id',
-            'roles': ['Student']
+            'extra_params': {
+                'roles': ['Student'],
+                'link_id': 'resource_link_id',
+            }
         }
         self.assertEqual(user_data, expected_user_data)
 
