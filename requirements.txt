@@ -1,4 +1,4 @@
-Django==1.8
+Django==1.9
 jsonfield
 oauth2==1.5.211
 PyYAML
