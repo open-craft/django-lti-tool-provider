@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import logging
-from django.core.urlresolvers import resolve
+
+from django.urls import resolve
 from six import add_metaclass
 
 
