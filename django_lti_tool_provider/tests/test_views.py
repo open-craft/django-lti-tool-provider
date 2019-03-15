@@ -112,7 +112,7 @@ class AnonymousLtiRequestTests(LtiRequestsTestBase):
     def test_given_correct_requests_sets_session_variable(self):
         response = self.send_lti_request(self.get_correct_lti_payload())
 
-        self._verify_redirected_to(response, self._url_base + self.DEFAULT_REDIRECT)
+        self._verify_redirected_to(response, self.DEFAULT_REDIRECT)
 
         self._verify_session_lti_contents(self.client.session, self._data)
 
@@ -150,7 +150,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         # Should have been created.
         user = User.objects.all()[0]
         self._verify_lti_created(user, self._data)
-        self._verify_redirected_to(response, self._url_base + self.DEFAULT_REDIRECT)
+        self._verify_redirected_to(response, self.DEFAULT_REDIRECT)
         self._verify_lti_updated_signal_is_sent(patched_send_lti_received, user)
 
     def test_given_session_and_lti_uses_lti(self, patched_send_lti_received):
@@ -166,7 +166,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         # Should have been created.
         user = User.objects.all()[0]
         self._verify_lti_created(user, self._data)
-        self._verify_redirected_to(response, self._url_base + self.DEFAULT_REDIRECT)
+        self._verify_redirected_to(response, self.DEFAULT_REDIRECT)
         self._verify_lti_updated_signal_is_sent(patched_send_lti_received, user)
 
     def test_force_login_change(self, patched_send_lti_received):
@@ -200,7 +200,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
 
 @ddt.ddt
 class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
-    TEST_URLS = ("/some_url", False), ("/some_other_url", False), ("http://qwe.asd.zxc.com", True)
+    TEST_URLS = "/some_url", "/some_other_url", "http://qwe.asd.zxc.com"
 
     def setUp(self):
         super(AuthenticationManagerIntegrationTests, self).setUp()
@@ -255,12 +255,10 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         self.assertEqual(user_data, expected_user_data)
 
     @ddt.data(*TEST_URLS)
-    @ddt.unpack
-    def test_anonymous_lti_is_processed_if_hook_does_not_authenticate_user(self, url, absolute):
-        self.hook_manager.anonymous_redirect_to.return_value = url
+    def test_anonymous_lti_is_processed_if_hook_does_not_authenticate_user(self, expected_url):
+        self.hook_manager.anonymous_redirect_to.return_value = expected_url
         response = self.send_lti_request(self.get_correct_lti_payload())
 
-        expected_url = url if absolute else "{base}{url}".format(base=self._url_base, url=url)
         self._verify_redirected_to(response, expected_url)
 
         self._verify_session_lti_contents(self.client.session, self._data)
@@ -271,13 +269,11 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         self._verify_lti_data(lti_data, self._data)
 
     @ddt.data(*TEST_URLS)
-    @ddt.unpack
-    def test_authenticated_lti_is_processed_if_hook_authenticates_user(self, url, absolute):
+    def test_authenticated_lti_is_processed_if_hook_authenticates_user(self, expected_url):
         self.hook_manager.authentication_hook.side_effect = self._authenticate_user
-        self.hook_manager.authenticated_redirect_to.return_value = url
+        self.hook_manager.authenticated_redirect_to.return_value = expected_url
         response = self.send_lti_request(self.get_correct_lti_payload())
 
-        expected_url = url if absolute else "{base}{url}".format(base=self._url_base, url=url)
         self._verify_redirected_to(response, expected_url)
 
         # verifying correct parameters were passed to auth manager hook
