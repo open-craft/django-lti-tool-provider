@@ -226,7 +226,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         args, user_data = self.hook_manager.authentication_hook.call_args
         request = args[0]
         self.assertEqual(request.body, payload)
-        self.assertFalse(request.user.is_authenticated())
+        self.assertFalse(request.user.is_authenticated)
         expected_user_data = {
             'username': self._data['lis_person_sourcedid'],
             'email': self._data['lis_person_contact_email_primary'],
@@ -242,7 +242,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         args, user_data = self.hook_manager.authentication_hook.call_args
         request = args[0]
         self.assertEqual(request.body, payload)
-        self.assertFalse(request.user.is_authenticated())
+        self.assertFalse(request.user.is_authenticated)
         expected_user_data = {
             'username': self._data['lis_person_sourcedid'],
             'email': self._data['lis_person_contact_email_primary'],

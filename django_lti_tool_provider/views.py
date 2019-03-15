@@ -46,7 +46,7 @@ class LTIView(View):
         return self.process_request(request)
 
     def process_request(self, request):
-        if request.user.is_authenticated():
+        if request.user.is_authenticated:
             try:
                 lti_parameters = self._get_lti_parameters_from_request(request)
                 if not self._right_user(request.user, lti_parameters):
@@ -55,7 +55,7 @@ class LTIView(View):
             except (oauth2.Error, AttributeError):
                 # Not a new visit, or better to keep existing auth.
                 pass
-        if not request.user.is_authenticated():
+        if not request.user.is_authenticated:
             try:
                 lti_parameters = self._get_lti_parameters_from_request(request)
             except oauth2.Error as e:
@@ -78,9 +78,11 @@ class LTIView(View):
 
             self.authentication_manager.authentication_hook(request, **lti_data)
 
-        if request.user.is_authenticated():
+        if request.user.is_authenticated:
+            _logger.info('Processing authenticated LTI request')
             return self.process_authenticated_lti(request)
         else:
+            _logger.info('Processing anonymous LTI request')
             return self.process_anonymous_lti(request)
 
     @classmethod
