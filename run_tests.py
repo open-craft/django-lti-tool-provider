@@ -31,9 +31,16 @@ settings.configure(
     ],
     ROOT_URLCONF='django_lti_tool_provider.tests.urls',
     REDIRECT_AFTER_LTI='home',
-    TEMPLATE_CONTEXT_PROCESSORS=(
-        "django.contrib.auth.context_processors.auth"
-    ),
+    TEMPLATES=[
+        {
+            "BACKEND": "django.template.backends.django.DjangoTemplates",
+            "OPTIONS": {
+                "context_processors": [
+                    "django.contrib.auth.context_processors.auth"
+                ]
+            }
+        }
+    ],
     USE_TZ=True,
     SOUTH_TESTS_MIGRATE=True,
     LTI_CLIENT_KEY='lti_client_key',
