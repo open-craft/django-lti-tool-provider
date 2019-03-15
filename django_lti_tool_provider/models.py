@@ -16,7 +16,10 @@ class WrongUserError(Exception):
 
 
 class LtiUserData(models.Model):
-    user = models.ForeignKey(User)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+    )
     edx_lti_parameters = JSONField(default={})
     custom_key = models.CharField(max_length=190, null=False, default='')
 
