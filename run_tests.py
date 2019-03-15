@@ -22,7 +22,7 @@ settings.configure(
         'django.contrib.sessions',
         'django_lti_tool_provider'
     ],
-    MIDDLEWARE_CLASSES=[
+    MIDDLEWARE=[
         'django.middleware.common.CommonMiddleware',
         'django.contrib.sessions.middleware.SessionMiddleware',
         'django.middleware.csrf.CsrfViewMiddleware',
