@@ -1,11 +1,11 @@
 from django.conf.urls import url
-from django.contrib.auth.views import login
+from django.contrib.auth.views import LoginView
 
 from django_lti_tool_provider import views as lti_views
 
 
 urlpatterns = [
     url(r'', lti_views.LTIView.as_view(), name='home'),
-    url('^accounts/login/$', login),
+    url('^accounts/login/$', LoginView.as_view()),
     url(r'^lti$', lti_views.LTIView.as_view(), name='lti')
 ]
