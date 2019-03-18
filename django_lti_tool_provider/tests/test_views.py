@@ -123,7 +123,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
     def _authentication_hook(self, request, user_id=None, username=None, email=None, **kwargs):
         user = User.objects.create_user(username or user_id, password='1234', email=email)
         user.save()
-        user = authenticate(username=user.username, password='1234')
+        user = authenticate(request, username=user.username, password='1234')
         login(request, user)
         return user
 
@@ -189,7 +189,7 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         request = self.send_lti_request(payload, client=RequestFactory())
         request.session = engine.SessionStore()
         request.user = None
-        user = authenticate(username=new_user.username, password='1234')
+        user = authenticate(request, username=new_user.username, password='1234')
         self.assertTrue(user)
         login(request, user)
         LTIView.as_view()(request)
@@ -215,7 +215,7 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         password = "test_password"
 
         user = User.objects.create_user(username=username, email=email, password=password)
-        authenticated = authenticate(username=username, password=password)
+        authenticated = authenticate(request, username=username, password=password)
         login(request, authenticated)
 
         self.addCleanup(lambda: user.delete())
