@@ -123,8 +123,8 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
     def _authentication_hook(self, request, user_id=None, username=None, email=None, **kwargs):
         user = User.objects.create_user(username or user_id, password='1234', email=email)
         user.save()
-        user = authenticate(request, username=user.username, password='1234')
-        login(request, user)
+        authenticated_user = authenticate(request, username=user.username, password='1234')
+        login(request, authenticated_user)
         return user
 
     def setUp(self):
@@ -189,12 +189,12 @@ class AuthenticatedLtiRequestTests(LtiRequestsTestBase):
         request = self.send_lti_request(payload, client=RequestFactory())
         request.session = engine.SessionStore()
         request.user = None
-        user = authenticate(request, username=new_user.username, password='1234')
-        self.assertTrue(user)
-        login(request, user)
+        authenticated_user = authenticate(request, username=new_user.username, password='1234')
+        self.assertTrue(authenticated_user)
+        login(request, authenticated_user)
         LTIView.as_view()(request)
-        self.assertEqual(request.user, user)
-        self.assertEqual(user, new_user)
+        self.assertEqual(request.user, authenticated_user)
+        self.assertEqual(authenticated_user, new_user)
 
         self.assertEqual(LtiUserData.objects.all().count(), 1)
 
@@ -215,8 +215,8 @@ class AuthenticationManagerIntegrationTests(LtiRequestsTestBase):
         password = "test_password"
 
         user = User.objects.create_user(username=username, email=email, password=password)
-        authenticated = authenticate(request, username=username, password=password)
-        login(request, authenticated)
+        authenticated_user = authenticate(request, username=username, password=password)
+        login(request, authenticated_user)
 
         self.addCleanup(lambda: user.delete())
 
